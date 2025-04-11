@@ -2410,7 +2410,7 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
     if (test-path "C:\Observability\OEMDiagnostics") {
       $LocalDiagsDir = Join-Path $LocalNodeDir "OEMDiagnostics"
       $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Get-ASEvent -Path (Get-ChildItem "C:\Observability\OEMDiagnostics\*.etl" | Select -Last 1).fullname}',
-                    'Invoke-Command -ComputerName _C_ {Start-MonitoringActionplanInstanceToComplete -actionPlanInstanceID (Get-ActionPlanInstances | ? Status -ne "Completed" | Sort EndDateTime | Select -last 1).InstanceID}'
+                    'Invoke-Command -ComputerName _C_ {Start-MonitoringActionplanInstanceToComplete -actionPlanInstanceID (Get-ActionPlanInstances | ? Status -ne "Completed" | Sort StartDateTime | Select -last 1).InstanceID}'
     }
 }
                 $nodejobs=@()
