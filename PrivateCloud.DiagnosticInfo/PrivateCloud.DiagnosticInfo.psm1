@@ -39,6 +39,9 @@ $CommonFuncBlock = {
     Import-Module SmbShare
     Import-Module SmbWitness
     Import-Module Storage
+    #gci "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AzureStack.Diagnostics\*.dll" | %{Add-Type -Path $_.fullname}
+    #Add-Type -Path 'C:\Program Files\WindowsPowerShell\Modules\Microsoft.AzureStack.Diagnostics\Microsoft.AzureStack.Common.Tools.Diagnostics.AzureStackDiagnostics.dll'
+    #Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AzureStack.Diagnostics\AzsDeploymentModule\Microsoft.AzureStack.Diagnostics.psm1"
 
     #
     # Shows error, cancels script
@@ -2409,8 +2412,9 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                     'Invoke-Command -ComputerName _C_ {Get-SolutionUpdate}'
     if (test-path "C:\Observability\OEMDiagnostics") {
       $LocalDiagsDir = Join-Path $LocalNodeDir "OEMDiagnostics"
-      $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Get-ASEvent -Path (Get-ChildItem "C:\Observability\OEMDiagnostics\*.etl" | Select -Last 1).fullname}',
-                    'Invoke-Command -ComputerName _C_ {Start-MonitoringActionplanInstanceToComplete -actionPlanInstanceID (Get-ActionPlanInstances | ? Status -ne "Completed" | Sort StartDateTime | Select -last 1).InstanceID}'
+      $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Echo Get-ActionplanInstanceToComplete;try {Start-MonitoringActionplanInstanceToComplete -actionPlanInstanceID (Get-ActionPlanInstances | ? Status -ne "Completed" | Sort StartDateTime | Select -last 1).InstanceID} catch {}}'#,
+		    #'Invoke-Command -ComputerName _C_ {Get-ASEvent -Path (Get-ChildItem "C:\Observability\OEMDiagnostics\*.etl" | Select -Last 1).fullname}',
+                    
     }
 }
                 $nodejobs=@()
@@ -2436,7 +2440,7 @@ $cmdsb = [scriptblock]::Create("$cmdex")
 #Add MSInfo32
 
                 $NodeSystemRootPath = Invoke-Command -ComputerName $using:NodeName -ConfigurationName $using:SessionConfigurationName { $env:SystemRoot }
-
+                $NodeSystemDrivePath = Invoke-Command -ComputerName $using:NodeName -ConfigurationName $using:SessionConfigurationName { $env:SystemDrive }
                 # Avoid to use 'Join-Path' because the drive of path may not exist on the local machine.
                 if ($using:IncludeDumps -eq $true) {
 
@@ -2491,15 +2495,15 @@ $cmdsb = [scriptblock]::Create("$cmdex")
                     $RPath = (Get-AdminSharePathFromLocal $using:NodeName "$NodeSystemRootPath\Cluster\Reports\*.*")
                     $RepFiles = Get-ChildItem -Path $RPath -Recurse -ErrorAction SilentlyContinue | Sort LastWriteTime}
                 catch { $RepFiles = ""; Show-Warning "Unable to get reports for node $using:NodeName" }
-                if (test-path "C:\Observability\OEMDiagnotics") { 
+                if (test-path "C:\Observability\OEMDiagnostics") { 
                     try {
                         $ASFiles=@()
-                        $ASpath = (Get-AdminSharePathFromLocal $using:NodeName "$NodeSystemRootPath\Obersability\OEMDiagnotics")
-                        $FWpath = (Get-AdminSharePathFromLocal $using:NodeName "$NodeSystemRootPath\dell\logs\lcm")
-                        $ASFiles += Get-ChildItem -Path $ASPath -Filter "*.zip" -Recurse -ErrorAction SilentlyContinue | Sort LastWriteTime
+                        $ASpath = (Get-AdminSharePathFromLocal $using:NodeName "$NodeSystemDrivePath\Observability\OEMDiagnostics")
+                        $FWpath = (Get-AdminSharePathFromLocal $using:NodeName "$NodeSystemDrivePath\dell\logs\lcm")
+                        $ASFiles += Get-ChildItem -Path $ASPath -Recurse -ErrorAction SilentlyContinue | Sort LastWriteTime | Select -Last 10
                         $ASFiles += Get-ChildItem -Path $FWPath -Recurse -ErrorAction SilentlyContinue | Sort LastWriteTime | Select -Last 10
                         }
-                    catch { $ASFiles = ""; Show-Warning "No zipped OEMDiagnotics or FW Files available for $using:NodeName"}
+                    catch { $ASFiles = ""; Show-Warning "No zipped OEMDiagnostics or FW Files available for $using:NodeName"}
                 }
 
                 $LocalReportDir = Join-Path $LocalNodeDir "ClusterReports"
@@ -2540,10 +2544,10 @@ $RepFiles |% {
                     
 
                 }
-$ASFiles |% {
+if ($ASFiles.count -gt 0) {$ASFiles |% {
                         try { Copy-Item $_.FullName $LocalDiagsDir }
-                        catch { Show-Warning "Could not copy report file $($_.FullName)" }
-                }
+                        catch { Show-Warning "Could not copy AS or FW Files file $($_.FullName)" }
+                }}
                 While ($msinfo.HasExited -ne $True) {Sleep -Milliseconds 100}
 
             }
