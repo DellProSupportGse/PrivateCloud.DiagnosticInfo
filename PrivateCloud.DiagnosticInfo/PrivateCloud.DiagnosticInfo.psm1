@@ -43,6 +43,43 @@ $CommonFuncBlock = {
     #Add-Type -Path 'C:\Program Files\WindowsPowerShell\Modules\Microsoft.AzureStack.Diagnostics\Microsoft.AzureStack.Common.Tools.Diagnostics.AzureStackDiagnostics.dll'
     #Import-Module "C:\Program Files\WindowsPowerShell\Modules\Microsoft.AzureStack.Diagnostics\AzsDeploymentModule\Microsoft.AzureStack.Diagnostics.psm1"
 
+    # Copy files from node(s) to HeathTest thru c$ admin share (Ex. c:\dell is changed it \\nodename\c$\dell)
+    # Added by Jim Gandy
+    function Copy-DirContentFromNode {
+            param (
+            [string[]] $Nodes,
+            [string] $PathOnNode,
+            [string] $SearchFilter = "*",
+            [string] $LocalDest
+        )
+        foreach ($NodeName in $Nodes) {
+            $remotePath = "\\$NodeName\$(($PathOnNode -replace ':', '$'))"
+
+            try {
+                $items = Get-ChildItem -Path $remotePath -Recurse -Directory -ErrorAction Stop |
+                        Where-Object { $_.Name -like $SearchFilter } |
+                        Sort-Object LastWriteTime -Descending |
+                        Select-Object -First 1
+            } catch {
+                Show-Warning "[$NodeName] Unable to access $($remotePath): $_"
+                continue
+            }
+
+            if ($items) {
+                $destPath = Join-Path -Path $LocalDest -ChildPath "Node_$NodeName\$($items.Name)"
+                New-Item -Path $destPath -ItemType Directory -Force | Out-Null
+                Show-Update "[$NodeName] Copying $($items.FullName) to $destPath"
+                try {
+                    Copy-Item -Path "$($items.FullName)\*" -Destination $destPath -Recurse -Force
+                } catch {
+                    Show-Warning "[$NodeName] Copy failed: $_"
+                }
+            } else {
+                Show-Warning "[$NodeName] No matching folders found with filter '$SearchFilter'"
+            }
+        }
+    }
+
     #
     # Shows error, cancels script
     #
@@ -2268,11 +2305,11 @@ Write-host "Dell SDDC Version"
             }
         }
 
-        # Events, cmd, reports, et.al.
+    #region Events, cmd, reports, et.al.
         Show-Update "Start gather of system info, cluster/netft/health logs, reports and dump files ..."
         #$NodeSystemRootPath = Invoke-Command -ComputerName $AccessNode -ConfigurationName $using:SessionConfigurationName { $env:SystemRoot }
-$RPath = (Get-AdminSharePathFromLocal $env:COMPUTERNAME $Path)
-If ($HoursOfEvents -eq -1) {$ClusterLogMinutes=999999} else {$ClusterLogMinutes=$HoursOfEvents*60}
+        $RPath = (Get-AdminSharePathFromLocal $env:COMPUTERNAME $Path)
+    If ($HoursOfEvents -eq -1) {$ClusterLogMinutes=999999} else {$ClusterLogMinutes=$HoursOfEvents*60}
         $JobStatic += Foreach ($NodeName in ($ClusterNodes.Name)) {Invoke-Command -AsJob -JobName "ClusterLogs$NodeName" -ComputerName $Nodename -ScriptBlock {
             try {$null=Get-ClusterLog -UseLocalTime -TimeSpan $using:ClusterLogMinutes} catch {}}
         }
@@ -2349,30 +2386,31 @@ $msinfo=Start-Process C:\Windows\System32\msinfo32.exe -ArgumentList  "/computer
                                 'Get-ScheduledTask -CimSession _C_ | Get-ScheduledTaskInfo -CimSession _C_',
                                 'Get-SmbServerNetworkInterface -CimSession _C_',
                                 'Get-StorageFaultDomain -CimSession _A_ -Type StorageScaleUnit |? FriendlyName -eq _N_ | Get-StorageFaultDomain -CimSession _A_',
-'Get-NetFirewallProfile -CimSession _C_',
-'Get-NetFirewallRule -CimSession _C_',
-'Get-NetConnectionProfile -CimSession _C_',
-'Get-SmbMultichannelConnection -CimSession _C_ -SmbInstance SBL',
-'Get-SmbClientConfiguration -CimSession _C_',
-'Get-SmbServerConfiguration -CimSession _C_',
-'Get-NetIPConfiguration -CimSession _C_',
-'Invoke-Command -ComputerName _C_ {Get-ComputerInfo}',
-'Invoke-Command -ComputerName _C_ {Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\spacePort\Parameters}',
-'Invoke-Command -ComputerName _C_ {Echo Get-RegSpacePortParameters;Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\spacePort\Parameters}',
-'Invoke-Command -ComputerName _C_ {Echo Get-RegOEMInformation;IF((Get-WmiObject -Class Win32_OperatingSystem).Caption -imatch "HCI"){Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation}}',
-'Invoke-Command -ComputerName _C_ {Echo Get-netsh;netsh int tcp show global}',
-'Invoke-Command -ComputerName _C_ {Echo Get-win32_networkadapter;Get-WmiObject win32_networkadapter}',
-'Invoke-Command -ComputerName _C_ {Echo Get-TcpipParametersInterfaces;Get-ItemProperty -path HKLM:\System\CurrentControlSet\services\Tcpip\Parameters\Interfaces\*}',
-'Invoke-Command -ComputerName _C_ {Echo Get-mpioParameters;IF((Get-WindowsFeature -Name "Multipath-IO").Installed -eq "True"){Get-ItemProperty -path HKLM:\SYSTEM\CurrentControlSet\Services\mpio\Parameters}}',
-'Invoke-Command -ComputerName _C_ {Echo Get-mpioSettings;IF((Get-WindowsFeature -Name "Multipath-IO").Installed -eq "True"){Get-ItemProperty -path "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e97b-e325-11ce-bfc1-08002be10318}\000*"}}',
-'Invoke-Command -ComputerName _C_ {Echo Get-MSDSMSupportedHW;IF((Get-WindowsFeature -Name "Multipath-IO").Installed -eq "True"){Get-MSDSMSupportedHW  -CimSession _C_}}',
-'Invoke-Command -ComputerName _C_ {Echo Get-DriverSuiteVersion;Get-ChildItem HKLM:\SOFTWARE\Dell\MUP -Recurse | Get-ItemProperty}',
-'Invoke-Command -ComputerName _C_ {Echo Get-ChipsetVersion;Get-WmiObject win32_product | ? Name -like "*chipset*"}',
-'Invoke-Command -ComputerName _C_ {Echo Get-NetFirewallRule;Get-NetFirewallRule -All}',
-                'Invoke-Command -ComputerName _C_ {Echo Get-ProcessByService;$aps=GPs;$r=@();$Ass=GWmi Win32_Service;foreach($p in $aps){$ss=$Ass|?{$_.ProcessID -eq $p.Id};IF($ss){$r+=[PSCustomObject]@{Service=$ss.DisplayName;ProcessName=$p.ProcessName;ProcessID=$p.Id}}}$r}',
-                'Get-NetNeighbor -CimSession _C_',
-                'Invoke-Command -ComputerName _C_ {Echo Get-CurrentVersion;Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"}',
-                'Get-VMNetworkAdapterIsolation -ManagementOS -CimSession _C_'
+                                'Get-NetFirewallProfile -CimSession _C_',
+                                'Get-NetFirewallRule -CimSession _C_',
+                                'Get-NetConnectionProfile -CimSession _C_',
+                                'Get-SmbMultichannelConnection -CimSession _C_ -SmbInstance SBL',
+                                'Get-SmbClientConfiguration -CimSession _C_',
+                                'Get-SmbServerConfiguration -CimSession _C_',
+                                'Get-NetIPConfiguration -CimSession _C_',
+                                'Invoke-Command -ComputerName _C_ {Get-ComputerInfo}',
+                                'Invoke-Command -ComputerName _C_ {Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\spacePort\Parameters}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-RegSpacePortParameters;Get-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\spacePort\Parameters}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-RegOEMInformation;IF((Get-WmiObject -Class Win32_OperatingSystem).Caption -imatch "HCI"){Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation}}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-netsh;netsh int tcp show global}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-win32_networkadapter;Get-WmiObject win32_networkadapter}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-TcpipParametersInterfaces;Get-ItemProperty -path HKLM:\System\CurrentControlSet\services\Tcpip\Parameters\Interfaces\*}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-mpioParameters;IF((Get-WindowsFeature -Name "Multipath-IO").Installed -eq "True"){Get-ItemProperty -path HKLM:\SYSTEM\CurrentControlSet\Services\mpio\Parameters}}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-mpioSettings;IF((Get-WindowsFeature -Name "Multipath-IO").Installed -eq "True"){Get-ItemProperty -path "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e97b-e325-11ce-bfc1-08002be10318}\000*"}}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-MSDSMSupportedHW;IF((Get-WindowsFeature -Name "Multipath-IO").Installed -eq "True"){Get-MSDSMSupportedHW  -CimSession _C_}}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-DriverSuiteVersion;Get-ChildItem HKLM:\SOFTWARE\Dell\MUP -Recurse | Get-ItemProperty}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-ChipsetVersion;Get-WmiObject win32_product | ? Name -like "*chipset*"}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-NetFirewallRule;Get-NetFirewallRule -All}',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-ProcessByService;$aps=GPs;$r=@();$Ass=GWmi Win32_Service;foreach($p in $aps){$ss=$Ass|?{$_.ProcessID -eq $p.Id};IF($ss){$r+=[PSCustomObject]@{Service=$ss.DisplayName;ProcessName=$p.ProcessName;ProcessID=$p.Id}}}$r}',
+                                'Get-NetNeighbor -CimSession _C_',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-CurrentVersion;Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"}',
+                                'Invoke-Command -ComputerName _C_ {Get-WindowsFeature | Sort-Object -Property @{Expression="Installed";Descending=$true}, @{Expression="Name";Descending=$false} | Select-Object DisplayName, Name, Installed}',
+                                'Get-VMNetworkAdapterIsolation -ManagementOS -CimSession _C_'
                 #[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite()
 
                 # These commands are specific to optional modules, add only if present
@@ -2387,11 +2425,11 @@ $msinfo=Start-Process C:\Windows\System32\msinfo32.exe -ArgumentList  "/computer
 
                 if (Get-Module Hyper-V -ErrorAction SilentlyContinue) {
                     $CmdsToLog += 'Get-VM -CimSession _C_ -ErrorAction SilentlyContinue | Select-Object *',
-        'Invoke-Command -ComputerName _C_ {Echo Get-vmprocessor;Get-VM -CimSession _C_ | Get-VMProcessor -ErrorAction SilentlyContinue | Select-Object *}',
+                                    'Invoke-Command -ComputerName _C_ {Echo Get-vmprocessor;Get-VM -CimSession _C_ | Get-VMProcessor -ErrorAction SilentlyContinue | Select-Object *}',
                                     'Get-VMNetworkAdapter -All -CimSession _C_ -ErrorAction SilentlyContinue | Select-Object *',
                                     'Get-VMSwitch -CimSession _C_ -ErrorAction SilentlyContinue | Select-Object *',
-    'Echo Get-VMSwitchTeam; Get-VMSwitch  -CimSession _C_ | Where-Object {$_.EmbeddedTeamingEnabled -eq $true} | %{Get-VMSwitchTeam -CimSession _C_  -SwitchName $_.name | Select-Object *}',
-    'Get-VMHost -CimSession _C_ -ErrorAction SilentlyContinue | Select-Object *',
+                                    'Echo Get-VMSwitchTeam; Get-VMSwitch  -CimSession _C_ | Where-Object {$_.EmbeddedTeamingEnabled -eq $true} | %{Get-VMSwitchTeam -CimSession _C_  -SwitchName $_.name | Select-Object *}',
+                                    'Get-VMHost -CimSession _C_ -ErrorAction SilentlyContinue | Select-Object *',
                                     'Get-VMNetworkAdapterVlan -CimSession _C_ -ManagementOS -ErrorAction SilentlyContinue | Select-Object *',
                                     'Get-VMNetworkAdapterTeamMapping -CimSession _C_ -ManagementOS -ErrorAction SilentlyContinue | Select-Object *'    
 }
@@ -2425,7 +2463,7 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                     try {
 
                         $cmdex = $cmd -replace '_C_',$using:NodeName -replace '_N_',$using:NodeName -replace '_A_',$using:AccessNode
-$cmdsb = [scriptblock]::Create("$cmdex")
+                        $cmdsb = [scriptblock]::Create("$cmdex")
                         $nodejobs+=Start-Job -Name $LocalFile -ScriptBlock $cmdsb
                         #$out = Invoke-Expression $cmdex
                         # capture as txt and xml for quick analysis according to taste
@@ -2437,11 +2475,12 @@ $cmdsb = [scriptblock]::Create("$cmdex")
 
 
 
-#Add MSInfo32
+                #Add MSInfo32
 
                 $NodeSystemRootPath = Invoke-Command -ComputerName $using:NodeName -ConfigurationName $using:SessionConfigurationName { $env:SystemRoot }
                 $NodeSystemDrivePath = Invoke-Command -ComputerName $using:NodeName -ConfigurationName $using:SessionConfigurationName { $env:SystemDrive }
                 # Avoid to use 'Join-Path' because the drive of path may not exist on the local machine.
+                Show-Update "Gathering Mini Dump and Live Kernel Data..."
                 if ($using:IncludeDumps -eq $true) {
 
                     $NodeMinidumpsPath = Invoke-Command -ComputerName $using:NodeName -ConfigurationName $using:SessionConfigurationName { (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl').MinidumpDir } -ErrorAction SilentlyContinue
@@ -2490,7 +2529,7 @@ $cmdsb = [scriptblock]::Create("$cmdex")
                         catch { Show-Warning "Could not copy LiveKernelReports file $($_.FullName)" }
                     }
                 }
-
+                Show-Update "Gathering Cluster Reports..."
                 try {
                     $RPath = (Get-AdminSharePathFromLocal $using:NodeName "$NodeSystemRootPath\Cluster\Reports\*.*")
                     $RepFiles = Get-ChildItem -Path $RPath -Recurse -ErrorAction SilentlyContinue | Sort LastWriteTime}
@@ -2506,37 +2545,70 @@ $cmdsb = [scriptblock]::Create("$cmdex")
                     catch { $ASFiles = ""; Show-Warning "No zipped OEMDiagnostics or FW Files available for $using:NodeName"}
                 }
 
+            # Run Send-DiagnosticData if HciSvc exists on the node
+            # Added by Jim Gandy
+            Show-Update "Gathering Send-DiagnosticData..."
+            Write-host "AccessNode: $using:AccessNode"
+            $CopySendDiag = Join-Path (Get-AdminSharePathFromLocal $using:AccessNode $LocalNodeDir) $NodeName
+
+            $nodejobs += Invoke-Command -ComputerName $Using:NodeName -JobName "SendDiagnosticData-$Using:NodeName" -AsJob -ScriptBlock {
+                param($CopySendDiag)
+                $log = @()
+
+                Write-host "[$env:COMPUTERNAME] Checking for HciSvc..."
+                $svc = Get-Service -Name 'HciSvc' -ErrorAction SilentlyContinue
+                if ($svc) {
+                    Write-host "[$env:COMPUTERNAME] HciSvc found. Starting diagnostic..."
+                    $RPath = 'C:\SendDiags'
+                    Remove-Item $RPath -Recurse -Force -ErrorAction SilentlyContinue
+                    New-Item -Path $RPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+                    try {
+                        Send-DiagnosticData -SaveToPath $RPath -CollectSddc $false
+                    } catch {
+                        Write-host "[$env:COMPUTERNAME] ERROR: $_"
+                    }
+                } else {
+                    Write-host "[$env:COMPUTERNAME] HciSvc not found. Skipping."
+                }
+                $log
+            } -ArgumentList $CopySendDiag
+
                 $LocalReportDir = Join-Path $LocalNodeDir "ClusterReports"
                 md $LocalReportDir | Out-Null
                 md $LocalDiagsDir | Out-Null
 
 
-
+                # Waits for Jobs to complete
                 Do {
-                    Sleep 1
-                    Foreach ($myjob in ($nodejobs | ? Name -notmatch "JOBDONE" | ? State -eq "Completed")) {
-$LocalFile=$myJob.Name
-                        $out = Receive-Job $myjob
+                    Start-Sleep -Seconds 1
 
-                        # capture as txt and xml for quick analysis according to taste
-                        $out | ft -AutoSize | Out-File -Width 9999 -Encoding ascii -FilePath "$LocalFile.txt"
-                        $out | Export-Clixml -Path "$LocalFile.xml"
-                        $myjob.Name=$myjob.Name+":JOBDONE"
-$myjob.Dispose()
-                    }
-                    $nodejobs | fl * | Out-File -FilePath (Join-Path $LocalNodeDir "GetNodeJobsStatus.txt")
+                foreach ($job in ($nodejobs | Where-Object { $_.State -eq 'Completed' -and -not $_.JobStatus })) {
+                    $LocalFile = $job.Name
+                    $output = Receive-Job $job
 
-                } while ($nodejobs.State -contains "Running")
-$FailedJobs=@()
-                Foreach ($myjob in ($nodejobs | ? State -ne "Completed")) {
-    $FailedJobs+=$myjob
-                    #Show-Warning "'$myjob' failed for node $Node ($(Receive-Job $myjob))"
+                    $output | Format-Table -AutoSize | Out-File -Width 9999 -Encoding ascii -FilePath "$LocalFile.txt"
+                    $output | Export-Clixml -Path "$LocalFile.xml"
+
+                    $job | Add-Member -MemberType NoteProperty -Name "JobStatus" -Value "JOBDONE" -Force
+                    $job.Dispose()
                 }
-$FailedJobs | fl * | Out-File -FilePath (Join-Path $LocalNodeDir "GetNodeJobsStatus.txt")
-                $nodejobs | Remove-Job
+
+                    $nodejobs | Format-List * | Out-File -FilePath (Join-Path $LocalNodeDir "GetNodeJobsStatus.txt")
+                }
+                while ($nodejobs.State -contains 'Running')
+
+                # Collect Failed Jobs
+                $FailedJobs = @()
+                foreach ($job in ($nodejobs | Where-Object { $_.State -ne 'Completed' })) {
+                    $FailedJobs += $job
+                }
+
+                $FailedJobs | Format-List * | Out-File -FilePath (Join-Path $LocalNodeDir "GetNodeJobsFailed.txt")
+                $nodejobs | Remove-Job -Force
+
 
                 # Copy logs from the Report directory; exclude cluster/health logs which we're getting seperately
-$RepFiles |% {
+                $RepFiles |% {
                     if (($_.Name -notlike "Cluster.log") -and ($_.Name -notlike "ClusterHealth.log")) {
                         try { Copy-Item $_.FullName $LocalReportDir }
                         catch { Show-Warning "Could not copy report file $($_.FullName)" }
@@ -2544,15 +2616,25 @@ $RepFiles |% {
                     
 
                 }
-if ($ASFiles.count -gt 0) {$ASFiles |% {
+                if ($ASFiles.count -gt 0) {$ASFiles |% {
                         try { Copy-Item $_.FullName $LocalDiagsDir }
                         catch { Show-Warning "Could not copy AS or FW Files file $($_.FullName)" }
                 }}
                 While ($msinfo.HasExited -ne $True) {Sleep -Milliseconds 100}
 
+                # Collect Send-DiagnosticData dir from the remote nodes ones the job completes
+                # Added by Jim Gandy
+                IF($ClusterNodes -eq $Null){
+                    $ClusterNodes = Get-ClusterNode | Select-Object -ExpandProperty Name #Finding $ClusterNodes if null 
+                }
+                Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
+                Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
+
             }
         }
+            
 
+#endregion
         Show-Update "Starting export diagnostic log and live dump ..."
 
         $JobCopyOut += Invoke-SddcCommonCommand -ArgumentList $IncludeLiveDump,$IncludeStorDiag -ClusterNodes $AccessNode -SessionConfigurationName $SessionConfigurationName -InitBlock $CommonFunc -JobName StorageDiagnosticInfoAndLiveDump {
