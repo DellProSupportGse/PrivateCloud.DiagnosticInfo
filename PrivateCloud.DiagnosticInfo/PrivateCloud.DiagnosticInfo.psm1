@@ -2009,12 +2009,20 @@ Write-host "Dell SDDC Version"
                 catch { Write-Warning "Unable to get ClusterAffinityRule.  `nError=$($_.Exception.Message)"
     }
             }
-                        $JobStatic += start-job -Name ClusterNodeSupportedVersion {
+             $JobStatic += start-job -Name ClusterNodeSupportedVersion {
                 try {
                     $o = Get-ClusterNodeSupportedVersion
                     $o | Export-Clixml ($using:Path + "GetClusterNodeSupportedVersion.XML")
                 }
                 catch { Write-Warning "Unable to get Cluster Node Supported Version `nError=$($_.Exception.Message)"
+ }
+            }
+                $JobStatic += start-job -Name GetCauClusterRole {
+                try {
+                    $o = Get-CauClusterRole
+                    $o | Export-Clixml ($using:Path + "GetCauClusterRole.XML")
+                }
+                catch { Write-Warning "Unable to get CAU Cluster Role `nError=$($_.Exception.Message)"
  }
             }
 
@@ -2450,7 +2458,7 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                     'Invoke-Command -ComputerName _C_ {Get-SolutionUpdate}'
     if (test-path "C:\Observability\OEMDiagnostics") {
       $LocalDiagsDir = Join-Path $LocalNodeDir "OEMDiagnostics"
-      $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Echo Get-ActionplanInstanceToComplete;try {Start-MonitoringActionplanInstanceToComplete -actionPlanInstanceID (Get-ActionPlanInstances | ? Status -ne "Completed" | Sort StartDateTime | Select -last 1).InstanceID} catch {}}'#,
+      $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Echo Get-ActionplanInstanceToComplete;try {(Get-ActionPlanInstances | ? Status -ne "Completed" | Sort StartDateTime | Select -last 1).ProgressAsXml} catch {}}'#,
 		    #'Invoke-Command -ComputerName _C_ {Get-ASEvent -Path (Get-ChildItem "C:\Observability\OEMDiagnostics\*.etl" | Select -Last 1).fullname}',
                     
     }
