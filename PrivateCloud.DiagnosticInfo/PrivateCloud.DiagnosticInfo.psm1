@@ -2009,12 +2009,20 @@ Write-host "Dell SDDC Version"
                 catch { Write-Warning "Unable to get ClusterAffinityRule.  `nError=$($_.Exception.Message)"
     }
             }
-                        $JobStatic += start-job -Name ClusterNodeSupportedVersion {
+             $JobStatic += start-job -Name ClusterNodeSupportedVersion {
                 try {
                     $o = Get-ClusterNodeSupportedVersion
                     $o | Export-Clixml ($using:Path + "GetClusterNodeSupportedVersion.XML")
                 }
                 catch { Write-Warning "Unable to get Cluster Node Supported Version `nError=$($_.Exception.Message)"
+ }
+            }
+                $JobStatic += start-job -Name GetCauClusterRole {
+                try {
+                    $o = Get-CauClusterRole
+                    $o | Export-Clixml ($using:Path + "GetCauClusterRole.XML")
+                }
+                catch { Write-Warning "Unable to get CAU Cluster Role `nError=$($_.Exception.Message)"
  }
             }
 
