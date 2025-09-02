@@ -1568,7 +1568,7 @@ function Get-SddcDiagnosticInfo
     #
     
     # do not allow running in a remote powershell session
-    if ($PSSenderInfo) {Show-Error "This module is not supported using a remote powershell session. Please run locally"}
+    If (Get-Variable PSSenderInfo -ErrorAction SilentlyContinue) {Show-Error "This module is not supported using a remote powershell session. Please run locally"}
 
     $OS = Get-CimInstance -ClassName Win32_OperatingSystem
     $S2DEnabled = $false
