@@ -2422,7 +2422,7 @@ $msinfo=Start-Process C:\Windows\System32\msinfo32.exe -ArgumentList  "/computer
                                 'Invoke-Command -ComputerName _C_ {Echo Get-CurrentVersion;Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"}',
                                 'Invoke-Command -ComputerName _C_ {Get-WindowsFeature | Sort-Object -Property @{Expression="Installed";Descending=$true}, @{Expression="Name";Descending=$false} | Select-Object DisplayName, Name, Installed}',
                                 'Get-VMNetworkAdapterIsolation -ManagementOS -CimSession _C_',
-                                'Invoke-Command -ComputerName _C_ {Echo Get-gpresult;gpresult /Z',
+                                'Invoke-Command -ComputerName _C_ {Echo Get-gpresult;gpresult /Z}',
                                 'Get-DnsClientServerAddress -CimSession _C_'
 
                 #[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite()
