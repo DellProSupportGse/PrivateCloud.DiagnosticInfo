@@ -2463,7 +2463,7 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
       $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Get-StampInformation}',
                     'Invoke-Command -ComputerName _C_ {Get-SolutionUpdateEnvironment}',
 					'Invoke-Command -ComputerName _C_ {Get-SolutionDiscoveryDiagnosticInfo}',
-					'Invoke-Command -ComputerName _C_ {Get-SolutionUpdate}',
+					'Invoke-Command -ComputerName _C_ {Get-SolutionUpdate}'
     if (test-path "C:\Observability\OEMDiagnostics") {
       $LocalDiagsDir = Join-Path $LocalNodeDir "OEMDiagnostics"
       $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Echo Get-ActionplanInstanceToComplete;try {(Get-ActionPlanInstances | ? Status -ne "Completed" | Sort StartDateTime | Select -last 1).ProgressAsXml} catch {}}'#,
@@ -6773,4 +6773,5 @@ Export-ModuleMember -Alias * -Function 'Get-SddcDiagnosticInfo',
     'Get-SpacesTimeline',
     'Set-SddcDiagnosticArchiveJobParameters',
     'Get-SddcDiagnosticArchiveJobParameters'
+
 
