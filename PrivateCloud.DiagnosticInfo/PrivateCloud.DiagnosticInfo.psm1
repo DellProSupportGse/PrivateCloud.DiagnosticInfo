@@ -2461,7 +2461,7 @@ $CmdsToLog += "Get-AzureStackHCIArcIntegration"
 #Added tun run commands that only exist on 23H2 and APEX nodes
 IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -ErrorAction SilentlyContinue}){
       $CmdsToLog += 'Invoke-Command -ComputerName _C_ {Get-StampInformation}',
-					'Invoke-Command -ComputerName _C_ {Get-SolutionUpdateEnvironment | Tee-Object -Variable GSUpdE >$Null;$GSUpdE | ForEach-Object{$_;$_.HealthCheckResult}}'}',
+					'Invoke-Command -ComputerName _C_ {Get-SolutionUpdateEnvironment | Tee-Object -Variable GSUpdE >$Null;$GSUpdE | ForEach-Object{$_;$_.HealthCheckResult}}',
 					'Invoke-Command -ComputerName _C_ {Get-SolutionDiscoveryDiagnosticInfo | Tee-Object -Variable GSDDI >$Null ;$GSDDI|ForEach-Object{$_;$_.NonApplicableUpdates}}',
 					'Invoke-Command -ComputerName _C_ {Get-SolutionUpdate | Tee-Object -Variable GSUpd >$Null;$GSUpd | ForEach-Object{$_;$_.HealthCheckResult}}'
     if (test-path "C:\Observability\OEMDiagnostics") {
@@ -6773,6 +6773,7 @@ Export-ModuleMember -Alias * -Function 'Get-SddcDiagnosticInfo',
     'Get-SpacesTimeline',
     'Set-SddcDiagnosticArchiveJobParameters',
     'Get-SddcDiagnosticArchiveJobParameters'
+
 
 
 
