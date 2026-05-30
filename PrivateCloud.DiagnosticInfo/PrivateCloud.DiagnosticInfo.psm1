@@ -1989,7 +1989,7 @@ Write-host "Dell SDDC Version"
 
             $JobStatic += start-job -Name ClusterSharedVolume {
                 try {
-                    $o = Get-ClusterSharedVolume -Cluster $using:AccessNode
+                    $o = Get-VirtualDisk | %{$vd=$_; $vd | Get-ClusterSharedVolume -Cluster $using:AccessNode | Select *,@{L="VDID";E={$vd.UniqueId}}}
                     $o | Export-Clixml ($using:Path + "GetClusterSharedVolume.XML")
                 }
                 catch { Write-Warning "Unable to get Cluster Shared Volumes.  `nError=$($_.Exception.Message)"
@@ -2643,9 +2643,10 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                 IF($ClusterNodes -eq $Null){
                     $ClusterNodes = Get-ClusterNode | Select-Object -ExpandProperty Name #Finding $ClusterNodes if null 
                 }
-                Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
-                Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
-
+                if ($svc) {
+                    Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
+                    Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
+                }
             }
         }
             
