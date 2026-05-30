@@ -56,7 +56,7 @@ $CommonFuncBlock = {
             $remotePath = "\\$NodeName\$(($PathOnNode -replace ':', '$'))"
 
             try {
-                $items = Get-ChildItem -Path $remotePath -Recurse -Directory -ErrorAction Stop |
+                $items = Get-ChildItem -Path $remotePath -Recurse -Depth 3 -Directory -ErrorAction Stop |
                         Where-Object { $_.Name -like $SearchFilter } |
                         Sort-Object LastWriteTime -Descending |
                         Select-Object -First 1
@@ -2637,21 +2637,21 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                         catch { Show-Warning "Could not copy AS or FW Files file $($_.FullName)" }
                 }}
                 While ($msinfo.HasExited -ne $True) {Sleep -Milliseconds 100}
-
-                # Collect Send-DiagnosticData dir from the remote nodes ones the job completes
-                # Added by Jim Gandy
-                IF($ClusterNodes -eq $Null){
-                    $ClusterNodes = Get-ClusterNode | Select-Object -ExpandProperty Name #Finding $ClusterNodes if null 
-                }
-                if (Get-Service 'HciSvc' -ErrorAction SilentlyContinue) {
-                    Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
-                    Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
-                }
             }
         }
             
 
 #endregion
+        # Collect Send-DiagnosticData dir from the remote nodes once the jobs complete
+        # Added by Jim Gandy, modified by Tommy Paulk
+        IF($ClusterNodes -eq $Null){
+            $ClusterNodes = Get-ClusterNode | Select-Object -ExpandProperty Name #Finding $ClusterNodes if null 
+        }
+        if (Get-Service 'HciSvc' -ErrorAction SilentlyContinue) {
+            Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
+            Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
+        }
+
         Show-Update "Starting export diagnostic log and live dump ..."
 
         $JobCopyOut += Invoke-SddcCommonCommand -ArgumentList $IncludeLiveDump,$IncludeStorDiag -ClusterNodes $AccessNode -SessionConfigurationName $SessionConfigurationName -InitBlock $CommonFunc -JobName StorageDiagnosticInfoAndLiveDump {
