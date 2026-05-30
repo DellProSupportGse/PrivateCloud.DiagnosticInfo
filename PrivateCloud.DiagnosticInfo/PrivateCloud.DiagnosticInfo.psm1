@@ -56,8 +56,7 @@ $CommonFuncBlock = {
             $remotePath = "\\$NodeName\$(($PathOnNode -replace ':', '$'))"
 
             try {
-                $items = Get-ChildItem -Path $remotePath -Recurse -Depth 3 -Directory -ErrorAction Stop |
-                        Where-Object { $_.Name -like $SearchFilter } |
+                $items = Get-ChildItem -Path $remotePath -Filter $SearchFilter -Recurse -Depth 3 -Directory -ErrorAction Stop |
                         Sort-Object LastWriteTime -Descending |
                         Select-Object -First 1
             } catch {
