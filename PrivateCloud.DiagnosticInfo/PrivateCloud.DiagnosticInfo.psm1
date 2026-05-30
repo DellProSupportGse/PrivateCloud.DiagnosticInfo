@@ -2643,7 +2643,7 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                 IF($ClusterNodes -eq $Null){
                     $ClusterNodes = Get-ClusterNode | Select-Object -ExpandProperty Name #Finding $ClusterNodes if null 
                 }
-                if ($svc) {
+                if (Get-Service 'HciSvc' -ErrorAction SilentlyContinue) {
                     Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
                     Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
                 }
