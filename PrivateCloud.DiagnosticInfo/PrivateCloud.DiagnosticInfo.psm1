@@ -2557,12 +2557,12 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                         $ASFiles += Get-ChildItem -Path $ASPath -Recurse -ErrorAction SilentlyContinue | Sort LastWriteTime | Select -Last 10
                         $ASFiles += Get-ChildItem -Path $FWPath -Recurse -ErrorAction SilentlyContinue | Sort LastWriteTime | Select -Last 10
                         }
-                    catch { $ASFiles = ""; Show-Warning "No zipped OEMDiagnostics or FW Files available for $using:NodeName"}
+                    catch { $ASFiles = ""; Show-Warning "No zipped OEMDiagnostics or FW Files available for $($using:NodeName)"}
                 }
 
             # Run Send-DiagnosticData if HciSvc exists on the node
             # Added by Jim Gandy
-            Show-Update "Gathering Send-DiagnosticData..."
+            Show-Update "Gathering Send-DiagnosticData for $($using:NodeName)..."
             Write-host "AccessNode: $using:AccessNode"
             $CopySendDiag = Join-Path (Get-AdminSharePathFromLocal $using:AccessNode $LocalNodeDir) $NodeName
 
@@ -2589,8 +2589,8 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
             } -ArgumentList $CopySendDiag
 
                 $LocalReportDir = Join-Path $LocalNodeDir "ClusterReports"
-                md $LocalReportDir | Out-Null
-                md $LocalDiagsDir | Out-Null
+                md $LocalReportDir -ErrorAction SilentlyContinue | Out-Null
+                md $LocalDiagsDir -ErrorAction SilentlyContinue | Out-Null
 
 
                 # Waits for Jobs to complete
@@ -2641,15 +2641,6 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
             
 
 #endregion
-        # Collect Send-DiagnosticData dir from the remote nodes once the jobs complete
-        # Added by Jim Gandy, modified by Tommy Paulk
-        IF($ClusterNodes -eq $Null){
-            $ClusterNodes = Get-ClusterNode | Select-Object -ExpandProperty Name #Finding $ClusterNodes if null 
-        }
-        if (Get-Service 'HciSvc' -ErrorAction SilentlyContinue) {
-            Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
-            Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
-        }
 
         Show-Update "Starting export diagnostic log and live dump ..."
 
@@ -2698,7 +2689,7 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
 
             # Also export locale metadata for off-system rendering (one-shot, we'll recursively copy)
             Write-Output (Get-AdminSharePathFromLocal $Node (Join-Path $NodePath "LocaleMetaData"))
-        }F
+        }
 
         if ($IncludeAssociations -and $ClusterName.Length) {
 
@@ -3344,6 +3335,16 @@ Show-Warning("Unable to get AzureStack HCI info.  `nError="+$_.Exception.Message
         Show-WaitChildJob $JobStatic 30
 $JobStatic | % {if ($_.Name -ne "Cluster Performance History" -and $_.Name -notlike "ClusterLogs*") { $o=Receive-Job $_; If ($o) {Write-Host "Job $($_.Name) Output:";$o}}}
         Remove-Job $JobStatic
+
+# Collect Send-DiagnosticData dir from the remote nodes once the jobs complete
+# Added by Jim Gandy, modified by Tommy Paulk
+IF($ClusterNodes -eq $Null){
+    $ClusterNodes = Get-ClusterNode | Select-Object -ExpandProperty Name #Finding $ClusterNodes if null 
+}
+if (Get-Service 'HciSvc' -ErrorAction SilentlyContinue) {
+    Show-Update "Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalRoot $($env:userprofile + "\HealthTest\")"
+    Copy-DirContentFromNode -Nodes $ClusterNodes -PathOnNode 'C:\SendDiags' -SearchFilter 'DiagLogs-*' -LocalDest $($env:userprofile + "\HealthTest\")
+}
 
 Show-Update "Copying cluster logs."
         Foreach ($NodeName in ((Get-ClusterNode).Name)) {
