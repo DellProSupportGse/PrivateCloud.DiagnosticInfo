@@ -2331,7 +2331,36 @@ Write-host "Dell SDDC Version"
                 $JobStatic += Foreach ($NodeName in ($ClusterNodes.Name)) {Invoke-Command -AsJob -JobName "ClusterLogsHealth$NodeName" -ComputerName $Nodename -ScriptBlock {
             $null=Get-ClusterLog -UseLocalTime -Health -TimeSpan $using:ClusterLogMinutes}
         }}
-
+        # Run Send-DiagnosticData if HciSvc exists on the node
+        # Added by Jim Gandy, modifed by Tommy Paulk
+        Foreach ($NodeName in $ClusterNodes) {
+            if (Get-Service -ComputerName $NodeName -Name 'HciSvc') {
+                Show-Update "Gathering Send-DiagnosticData for $($NodeName)..."
+                $LocalNodeDir = Get-NodePath $Path $NodeName
+                $CopySendDiag = Join-Path (Get-AdminSharePathFromLocal $AccessNode $LocalNodeDir) $NodeName
+                Write-host "AccessNode: $AccessNode"
+                $JobStatic += Invoke-Command -ComputerName $NodeName -JobName "SendDiagnosticData-$NodeName" -AsJob -ScriptBlock {
+                    param($CopySendDiag)
+                    $log = @()
+                    Write-host "[$env:COMPUTERNAME] Checking for HciSvc..."
+                    $svc = Get-Service -Name 'HciSvc' -ErrorAction SilentlyContinue
+                    if ($svc) {
+                        Write-host "[$env:COMPUTERNAME] HciSvc found. Starting diagnostic..."
+                        $RPath = 'C:\SendDiags'
+                        Remove-Item $RPath -Recurse -Force -ErrorAction SilentlyContinue
+                        New-Item -Path $RPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+                        try {
+                            Send-DiagnosticData -SaveToPath $RPath -CollectSddc $false
+                        } catch {
+                            Write-host "[$env:COMPUTERNAME] ERROR: $_"
+                        }
+                    } else {
+                        Write-host "[$env:COMPUTERNAME] HciSvc not found. Skipping."
+                    }
+                    $log
+                } -ArgumentList $CopySendDiag
+            }
+        }
         $JobStatic += $ClusterNodes.Name |% {
 
             $NodeName = $_
@@ -2349,13 +2378,13 @@ Write-host "Dell SDDC Version"
                 #
                 # Gather SYSTEMINFO.EXE output for a given node
 $SysInfoOut=(Join-Path (Get-NodePath $using:Path $using:NodeName) "SystemInfo.TXT")
-Start-Process -FilePath "$env:comspec" -ArgumentList "/c SystemInfo.exe /S $using:NodeName > $SysInfoOut" -WindowStyle Hidden # -Wait
+Start-Process -FilePath "$env:comspec" -ArgumentList "/c SystemInfo.exe /S $using:NodeName > $SysInfoOut" -WindowStyle Minimized # -Wait
 
 # Gather MSINFO32.EXE output for a given node
 #$MSINFO32Out=(Join-Path (Get-NodePath $using:Path $using:NodeName) "MSINFO32.NFO")
 #Start-Process -FilePath "$env:comspec" -ArgumentList "/c MSINFO32.exe /nfo $MSINFO32Out /Computer $using:NodeName" -WindowStyle Hidden -Wait
 $LocalFileMsInfo = (Join-Path $LocalNodeDir "\msinfo.nfo")
-$msinfo=Start-Process C:\Windows\System32\msinfo32.exe -ArgumentList  "/computer $using:NodeName /nfo $LocalFileMsInfo" -PassThru # -Wait
+$msinfo=Start-Process C:\Windows\System32\msinfo32.exe -WindowStyle Minimized -ArgumentList  "/computer $using:NodeName /nfo $LocalFileMsInfo" -PassThru # -Wait
 #$LocalFileFWInfo = (Join-Path $LocalNodeDir "\FirewallRules.xml")
 #netsh wfp show filters file = "$LocalFileFWInfo"
 
@@ -2559,34 +2588,6 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                         }
                     catch { $ASFiles = ""; Show-Warning "No zipped OEMDiagnostics or FW Files available for $($using:NodeName)"}
                 }
-
-            # Run Send-DiagnosticData if HciSvc exists on the node
-            # Added by Jim Gandy
-            Show-Update "Gathering Send-DiagnosticData for $($using:NodeName)..."
-            Write-host "AccessNode: $using:AccessNode"
-            $CopySendDiag = Join-Path (Get-AdminSharePathFromLocal $using:AccessNode $LocalNodeDir) $NodeName
-
-            $nodejobs += Invoke-Command -ComputerName $Using:NodeName -JobName "SendDiagnosticData-$Using:NodeName" -AsJob -ScriptBlock {
-                param($CopySendDiag)
-                $log = @()
-
-                Write-host "[$env:COMPUTERNAME] Checking for HciSvc..."
-                $svc = Get-Service -Name 'HciSvc' -ErrorAction SilentlyContinue
-                if ($svc) {
-                    Write-host "[$env:COMPUTERNAME] HciSvc found. Starting diagnostic..."
-                    $RPath = 'C:\SendDiags'
-                    Remove-Item $RPath -Recurse -Force -ErrorAction SilentlyContinue
-                    New-Item -Path $RPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
-                    try {
-                        Send-DiagnosticData -SaveToPath $RPath -CollectSddc $false
-                    } catch {
-                        Write-host "[$env:COMPUTERNAME] ERROR: $_"
-                    }
-                } else {
-                    Write-host "[$env:COMPUTERNAME] HciSvc not found. Skipping."
-                }
-                $log
-            } -ArgumentList $CopySendDiag
 
                 $LocalReportDir = Join-Path $LocalNodeDir "ClusterReports"
                 md $LocalReportDir -ErrorAction SilentlyContinue | Out-Null
