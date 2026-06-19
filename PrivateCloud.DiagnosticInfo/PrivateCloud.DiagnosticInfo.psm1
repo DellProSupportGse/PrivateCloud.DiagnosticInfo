@@ -2636,7 +2636,8 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                         try { Copy-Item $_.FullName $LocalDiagsDir }
                         catch { Show-Warning "Could not copy AS or FW Files file $($_.FullName)" }
                 }}
-                While ((Test-Path $LocalFileMsInfo -ErrorAction SilentlyContinue) -and $msinfo.HasExited -ne $True -and (Get-Item $LocalFileMsInfo -ErrorAction SilentlyContinue).LastWriteTime -ge (Get-Date).AddMinutes(-5)) {Sleep -Milliseconds 100}
+                While (!(Test-Path $LocalFileMsInfo -ErrorAction SilentlyContinue) -and $msinfo.HasExited -ne $True) {Sleep -Milliseconds 100}
+                While ($msinfo.HasExited -ne $True -and (Get-Item $LocalFileMsInfo -ErrorAction SilentlyContinue).LastWriteTime -ge (Get-Date).AddMinutes(-5)) {Sleep -Milliseconds 100}
             }
         }
             
