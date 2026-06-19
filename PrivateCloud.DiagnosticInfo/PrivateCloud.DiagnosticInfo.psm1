@@ -2365,7 +2365,7 @@ Write-host "Dell SDDC Version"
 
             $NodeName = $_
 
-            Invoke-SddcCommonCommand -JobName "System Info: $NodeName" -InitBlock $CommonFunc -SessionConfigurationName $SessionConfigurationName -ScriptBlock {
+            Invoke-SddcCommonCommand -ClusterNodes $NodeName -JobName "System Info: $NodeName" -InitBlock $CommonFunc -SessionConfigurationName $SessionConfigurationName -ScriptBlock {
 
                 $Node = "$using:NodeName"
                 if ($using:ClusterDomain.Length) {
