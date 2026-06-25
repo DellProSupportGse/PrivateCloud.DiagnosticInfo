@@ -2333,6 +2333,49 @@ Write-host "Dell SDDC Version"
         }}
         # Run Send-DiagnosticData if HciSvc exists on the node
         # Added by Jim Gandy, modifed by Tommy Paulk
+        
+Add-Type @"
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+
+public class Win32 {
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    public const int SW_MINIMIZE = 6;
+}
+"@
+        $minBlankWindows = [Win32+EnumWindowsProc]{
+            param($hWnd, $lParam)
+            if ([Win32]::IsWindowVisible($hWnd))
+            {
+                $len = [Win32]::GetWindowTextLength($hWnd)
+                $sb = New-Object System.Text.StringBuilder ($len + 1)
+                [Win32]::GetWindowText($hWnd, $sb, $sb.Capacity) | Out-Null
+                $title = $sb.ToString()
+                if ($title -like "*\WindowsPowershell\v1.0\powershell.exe*")
+                {
+                    #Write-Host "Minimizing: $title"
+                    [Win32]::ShowWindow($hWnd, [Win32]::SW_MINIMIZE) | Out-Null
+                }
+            }
+            $true
+        }
         Foreach ($NodeName in $ClusterNodes) {
             if (Get-Service -ComputerName $NodeName -Name 'HciSvc') {
                 Show-Update "Gathering Send-DiagnosticData for $($NodeName)..."
@@ -2640,7 +2683,8 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
                 While ($msinfo.HasExited -ne $True -and (Get-Item $LocalFileMsInfo -ErrorAction SilentlyContinue).LastWriteTime -ge (Get-Date).AddMinutes(-5)) {Sleep -Milliseconds 100}
             }
         }
-            
+        #Find and minimize Send-DiagnosticData windows
+        [Win32]::EnumWindows($minBlankWindows, [IntPtr]::Zero) | Out-Null
 
 #endregion
 
@@ -2676,6 +2720,8 @@ IF(Invoke-Command -ComputerName $using:NodeName {gcm Get-StampInformation -Error
         }
 
         Show-Update "Starting export of events ..."
+        #Find and minimize Send-DiagnosticData windows
+        [Win32]::EnumWindows($minBlankWindows, [IntPtr]::Zero) | Out-Null
 
         $JobCopyOut += Invoke-SddcCommonCommand -ArgumentList $HoursOfEvents -ClusterNodes $($ClusterNodes).Name -SessionConfigurationName $SessionConfigurationName -InitBlock $CommonFunc -JobName Events {
 
@@ -3296,7 +3342,8 @@ Show-Warning("Unable to get AzureStack HCI info.  `nError="+$_.Exception.Message
 
     Show-Update "Start gather of Cluster Performance information..."
 
-        
+        #Find and minimize Send-DiagnosticData windows
+        [Win32]::EnumWindows($minBlankWindows, [IntPtr]::Zero) | Out-Null
 
         ####
         # Now receive the jobs requiring remote copyout
@@ -3313,7 +3360,8 @@ Show-Warning("Unable to get AzureStack HCI info.  `nError="+$_.Exception.Message
             if ($JobCopyOut.Count) { $JobCopy += Start-CopyJob $Path -Delete $JobCopyOut }
             if ($JobCopyOutNoDelete.Count) { $JobCopy += Start-CopyJob $Path $JobCopyOutNoDelete }
             Show-WaitChildJob $JobCopy 30
-
+            #Find and minimize Send-DiagnosticData windows
+            [Win32]::EnumWindows($minBlankWindows, [IntPtr]::Zero) | Out-Null
             # receive any copyout errors for logging/triage
             Receive-Job $JobCopy
             Remove-Job ($JobCopyOut + $JobCopyOutNoDelete)
@@ -3527,10 +3575,17 @@ Get-Counter -Counter ($using:set).Paths -SampleInterval 1 -MaxSamples $using:Per
             Show-Update "Exporting counters"
 
             $PerfRaw | Export-counter -Path ($Path + "GetCounters.blg") -Force -FileFormat BLG#>
-            Do {Write-Host -Nonewline ".";sleep 10} 
-            While ($PerfProc.HasExited -ne $True)
-            Write-Host $Null
-            Show-Update "Performance monitoring completed"
+            Show-Update "Waiting for performance counters to complete. Timeout in 30 minutes..."
+            $xb=0
+            Do {Write-Host -Nonewline ".";sleep 10;$xb++} 
+            While ($PerfProc.HasExited -ne $True -and $xb -lt 180)
+            Write-Host ""
+            If ($xb -lt 180) {
+                Show-Update "Performance monitoring completed"
+            } else {
+                $PerfProc | kill
+                Show-Warning "Performance monitoring timed out"
+            }
 
             if ($ProcessCounter) {
 
