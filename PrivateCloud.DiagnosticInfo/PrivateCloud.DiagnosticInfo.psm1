@@ -3527,11 +3527,17 @@ Get-Counter -Counter ($using:set).Paths -SampleInterval 1 -MaxSamples $using:Per
             Show-Update "Exporting counters"
 
             $PerfRaw | Export-counter -Path ($Path + "GetCounters.blg") -Force -FileFormat BLG#>
-            Do {Write-Host -Nonewline ".";sleep 10} 
-            While ($PerfProc.HasExited -ne $True)
-            Write-Host $Null
-            Show-Update "Performance monitoring completed"
-
+            Show-Update "Waiting for performance counters to complete. Timeout in 30 minutes..."
+            $xb=0
+            Do {Write-Host -Nonewline ".";sleep 10;$xb++} 
+            While ($PerfProc.HasExited -ne $True -and $xb -lt 180)
+            Write-Host ""
+            If ($xb -lt 180) {
+                Show-Update "Performance monitoring completed"
+            } else {
+                $PerfProc | kill
+                Show-Warning "Performance monitoring timed out"
+            }
             if ($ProcessCounter) {
 
                 "Collected $PerfSamples seconds of raw performance counters. Processing...`n"
