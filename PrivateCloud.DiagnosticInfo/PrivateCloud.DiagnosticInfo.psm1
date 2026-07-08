@@ -2334,7 +2334,7 @@ Write-host "Dell SDDC Version"
         # Run Send-DiagnosticData if HciSvc exists on the node
         # Added by Jim Gandy, modifed by Tommy Paulk
         Foreach ($NodeName in $ClusterNodes) {
-            if (Get-Service -ComputerName $NodeName -Name 'HciSvc') {
+            if (Get-Service -ComputerName $NodeName -Name 'HciSvc' -ErrorAction SilentlyContinue) {
                 Show-Update "Gathering Send-DiagnosticData for $($NodeName)..."
                 $LocalNodeDir = Get-NodePath $Path $NodeName
                 $CopySendDiag = Join-Path (Get-AdminSharePathFromLocal $AccessNode $LocalNodeDir) $NodeName
