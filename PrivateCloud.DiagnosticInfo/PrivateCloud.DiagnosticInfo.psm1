@@ -2351,6 +2351,7 @@ Write-host "Dell SDDC Version"
                         New-Item -Path $RPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
                         try {
                             Send-DiagnosticData -SaveToPath $RPath -CollectSddc $false
+                            Get-ChildItem "$Rpath\MOC_ARB_*.zip" -Recurse | sort name -Descending | select -Skip 1 | Remove-Item -Force -Confirm:$false
                         } catch {
                             Write-host "[$env:COMPUTERNAME] ERROR: $_"
                         }
